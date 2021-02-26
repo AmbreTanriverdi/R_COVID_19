@@ -20,14 +20,16 @@ Projet.Rmd
 
 **Visualisation (with code) :**
 - Projet.html
-- Projet.pdf
-  
+- Projet.pdf  
+&nbsp;  
+
 **Used data :**
 - data1.csv
 - donnees.csv
 - donnes_covid19_avril_total_par_departement_GPS.csv
-- Fatality.csv
-  
+- Fatality.csv  
+&nbsp;  
+
 **Project subject :** <br>
 Sujet_Projet_L3_2019-2020.pdf
 
