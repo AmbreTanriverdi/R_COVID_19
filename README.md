@@ -38,5 +38,5 @@ Sujet_Projet_L3_2019-2020.pdf
 ---
 
 ## Contact
-[Mail](ambre.tanriverdi@gmail.com>) <br>
-[LinkedIn](www.linkedin.com/in/ambretanriverdi)
+[Mail](mailto:ambre.tanriverdi@gmail.com>) <br>
+[LinkedIn](https://www.linkedin.com/in/ambretanriverdi/)
