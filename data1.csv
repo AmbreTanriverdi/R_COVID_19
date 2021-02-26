@@ -1,0 +1,122 @@
+
+
+
+
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+
+
+
+
+
+
+
+<html xmlns="http://www.w3.org/1999/xhtml" lang="fr">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	    <title>Universit&eacute; Paris Descartes : CAS &#8211; Central Authentication Service</title>
+	   
+	    
+           
+	       
+           
+           
+           
+           
+           
+           
+           <!-- normal -->
+	        	<link href="/cas/themes/upd/style.css;jsessionid=5033EC7349B8143DDAB58422FB7599D2" rel="stylesheet" type="text/css" media="screen">
+        	
+        
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+	    <link rel="icon" href="/cas/favicon.ico;jsessionid=5033EC7349B8143DDAB58422FB7599D2" type="image/x-icon" />
+	    <link href="/cas/themes/upd/font/font.css;jsessionid=5033EC7349B8143DDAB58422FB7599D2" rel="stylesheet" type="text/css">
+	    <!-- link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700" rel="stylesheet" type="text/css" -->
+	    <link href="fonts.googleapis.css" rel="stylesheet" type="text/css">
+	    <!-- script src="https://use.fontawesome.com/3532fbb125.js"></script -->
+	    <script src="3532fbb125.js"></script>
+	</head>
+	<body id="cas">
+		<div class="container">
+			<div class="content">
+				
+
+
+<section class="section section-login">
+	<div class="Popup_Clean_container">
+		<form id="fm1" class="fm-v clearfix" action="/cas/login;jsessionid=5033EC7349B8143DDAB58422FB7599D2?service=http%3a%2f%2fup5.fr%2fadmin%2f" method="post">
+			<img class="logo"
+				src="/cas/themes/upd/img/logo_new.png;jsessionid=5033EC7349B8143DDAB58422FB7599D2"
+				alt="logo descartes">
+			
+			
+			
+				
+				
+				<input id="username" name="username" class="required identifiant" tabindex="1" placeholder="Votre identifiant" type="text" accesskey="n" type="text" value="" size="25" autocomplete="off"/>
+			
+				
+				<input id="password" name="password" class="required mdp" tabindex="2" placeholder="Votre mot de passe" type="password" type="password" value="" size="25" autocomplete="off"/>
+				<input type="hidden" name="lt" value="LT-034c679e-1212-4ece-9fb4-c9dfabeccd1dZe1s1" />
+				<input type="hidden" name="_eventId" value="submit" />
+				
+				<input class="connect" name="submit" accesskey="l"
+					id="submit_authentification"
+					value="Me connecter"
+					tabindex="4" type="submit" />
+			    <div class="footer-login">
+			     <p class="securite-message">Pour des raisons de sécurité, veuillez fermer votre navigateur lorsque vous avez fini d'accéder aux services authentifiés.</p>
+					<a href="https://faq.parisdescartes.fr/premi-re-connexion-un-service-num-rique-de-l-universit-paris-descartes/" class="first-connect" target="_blank" title="première connexion ?">Première connexion</a>
+					&nbsp;-&nbsp;
+					<a href="https://up5.fr/MdpPerdu" class="aide" target="_blank" title="aide">Mot de passe oublié</a>
+				</div>
+		</form>
+	</div>
+	
+	
+	<div class="fish">
+ <div class="fish-body">
+   <div class="eye">
+     <div class="pupil"></div>
+   </div>
+ </div>
+ <div class="fin"></div>
+ <div class="fin fin-bottom"></div>
+</div>
+
+<div class="bubbles bubble-1"></div>
+<div class="bubbles bubble-5"></div>
+<div class="bubbles bubble-2"></div>
+<div class="bubbles bubble-6"></div>
+<div class="bubbles bubble-3"></div>
+<div class="bubbles bubble-7"></div>
+<div class="bubbles bubble-4"></div>
+<div class="bubbles bubble-8"></div>
+</section>
+
+
+
+</div>
+</div>
+
+/* html */
+
+
+
+
+<!-- scripts pour placeholder old browsers -->
+<script type="text/javascript" 	src="/cas/themes/upd/js/jquery.js;jsessionid=5033EC7349B8143DDAB58422FB7599D2"></script>
+<script type="text/javascript" 	src="/cas/themes/upd/js/jquery.placeholder.min.js;jsessionid=5033EC7349B8143DDAB58422FB7599D2"></script>
+<script>
+	$('input, textarea').placeholder();
+</script>
+<!-- fin scripts pour placeholder old browsers -->
+
+
+</body>
+</html>
