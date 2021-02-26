@@ -9,6 +9,8 @@
 **Year :** Third year of bachelor's degree in IT - L3 Informatique<br>
 **Subject :** Digital data processing - Traitement de données numériques 
 
+I analysed COVID-19's data (1st to 14th april 2020) in France, in every region. Go check my presentation for more information.
+
 ---
 
 ## About the files
