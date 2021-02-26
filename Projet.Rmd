@@ -1,0 +1,996 @@
+---
+title: "Projet Traitement numérique de données"
+author: "TANRIVERDI Ambre 21607950"
+date: "04/27/2020"
+output: 
+  pdf_document: default
+  html_document: default
+---
+
+# Covid-19
+
+#### Librairies utilisées
+```{r echo=TRUE, message=FALSE}
+# Graphiques
+library(dplyr)
+library(ggplot2)
+# Heatmap et corrélation
+library(corrplot)
+library("pheatmap")
+library("RColorBrewer")
+library(Hmisc)
+# Affichage des cartes
+library(viridisLite)
+library(viridis)
+library(ggplot2)
+library(dplyr)
+library(maps)
+# Assemblage des cartes
+library(gridExtra, warn.conflicts = FALSE)
+library(grid)
+library(lattice)
+# MAE et MSE
+library(MLmetrics, warn.conflicts = FALSE)
+# ACP
+library(psy)
+library(factoextra)
+library(FactoMineR)
+# CAH
+library(dendextend)
+library(cluster)
+```
+
+## Partie 1 : Analyses descriptives
+
+### 1
+#### Chargement du jeu de données
+```{r}
+covid = read.csv("donnees.csv", sep = ";")
+head(covid)
+```
+### 2
+#### Présentation du jeu de données
+```{r}
+dim(covid)
+summary(covid)
+glimpse(covid)
+```
+Présentation du jeu de données :
+- dimensions : 100 lignes et 8 colonnes
+- types de variables : nous avons des variables qualitatives nominales (maille_nom, latitude, longitude) et des variables quantitatives discrètes (les autres variables)
+
+#### Analyse descriptive
+```{r}
+cov = covid[,-c(3, 4)]
+head(cov)
+```
+
+```{r}
+# Boîtes à moustaches sur toutes les variables numériques
+par(mar=c(8,6,4,1))
+# On met les données à la même échelle pour la lisibilité
+sca = scale(cov[, -1], center = T, scale = T)
+boxplot(sca, las = 2, col=rgb(0.8, 0.8, 1))
+boxplot(sca, las = 2, col=rgb(0.8, 0.8, 1), outline = FALSE)
+```
+Nous avons des données aberrantes pour toutes les variables. Les centrages sont plutôt similaires, et la dispersion également, en dehors de duree_jours.
+
+```{r}
+# Histogramme pour toutes les variables
+par(mfrow = c(2, 3))
+hist.data.frame(as.data.frame(sca))
+```
+Nous avons une grande asymétrie à droite pour chaque variable, et quelques données aberrantes (surtout pour duree_jours). La dispersion et le centrage sont similaires.
+
+```{r}
+# Diagramme en barres
+par(mfrow=c(2,2))
+
+cov_names = names(cov)
+  
+for (i in c(3:length(colnames(cov)))) {
+  p = cov[, i]
+  barplot(p, main = cov_names[i], col = "#69b3a2", border = "#69b3a2")
+}
+
+```
+Les valeurs des quatres variables sont visuellement similaires entre elles.
+
+```{r}
+# Heatmap des variables
+corr = signif(cor(cov[, -c(1, 2)]), 2)
+
+col <- colorRampPalette(brewer.pal(9, "GnBu"))(256)
+pheatmap(corr, col = col)
+```
+```{r}
+pairs(cov[,-c(1, 2)], pch = 19, lower.panel = NULL, col = "darkolivegreen3")
+```
+Toutes les variables numériques sont fortement corrélée positivement entre elles.
+```{r}
+# Diagramme en camembert
+tbl = table(cov[, 2])
+slices = as.vector(tbl)
+pct = round(slices/sum(slices)*100)
+pct = paste(pct,"%",sep="")
+
+names = paste(names(tbl), "jours", sep = " ")
+cols = brewer.pal(n = length(tbl), name = 'GnBu')
+
+pie(slices, labels = pct, main = "Fréquence de la durée en jours", col = cols)
+legend("topright", legend = names, cex=0.9, bty = "n", fill = cols)
+
+```
+Nous voyons que 81% des département ont récolté 15 donnée, 13% ont 16 données, 5% en ont 19, et seulement 1% en a 20.
+
+### 3
+#### Affichage des données sur des cartes géographiques.
+```{r}
+cov_dbl = covid
+# conversion de la latitude et de la longitude en variable numérique
+cov_dbl$longitude <- gsub(',', '.', cov_dbl$longitude)
+cov_dbl$latitude <- gsub(',', '.', cov_dbl$latitude)
+cov_dbl$longitude=as.numeric(cov_dbl$longitude)
+cov_dbl$latitude=as.numeric(cov_dbl$latitude)
+
+head(cov_dbl, 2)
+```
+Pour afficher la carte de France avec les régions d'Outre-Mer sans représentation des océans, j'ai décidé de réaliser chaque carte à part et de les combiner à la fin.
+```{r}
+# Sélection de la carte de France (hors régions d'Outre-Mer)
+fr <- map_data("world") %>% filter(region=="France")
+data <- world.cities %>% filter(country.etc=="France")
+
+# Sélection des départements se trouvant en France Métropolitaine
+outre_mer = c("Mayotte", "Guyane", "Guadeloupe", "Martinique", "La Réunion")
+
+metropoli = cov_dbl
+metropoli = metropoli[!(metropoli$maille_nom %in% outre_mer),]
+```
+Dans cette partie, nous préparons la carte de la France métropolitaine.
+```{r}
+# deces_total
+metropoli_deces = ggplot() +
+  geom_polygon(data = fr, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = metropoli, aes(x=longitude, y=latitude, size=deces_total, color=deces_total), alpha=0.9) +
+  scale_size_continuous(range=c(1,10), name = "") +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5, breaks = c(50, 400, 3000)) +
+  theme_void() + 
+  guides( colour = guide_legend(title="Nombre de personnes")) +
+  coord_map()
+
+# reanimation_total
+metropoli_reanimation = ggplot() +
+  geom_polygon(data = fr, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = metropoli, aes(x=longitude, y=latitude, size=reanimation_total, color=reanimation_total), alpha=0.9) +
+  scale_size_continuous(range=c(1,10), name = "") +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5, breaks = c(50, 400, 3000)) +
+  theme_void() + 
+  guides( colour = guide_legend(title="Nombre de personnes")) +
+  coord_map()
+
+# hospitalises_total
+metropoli_hospitalises = ggplot() +
+  geom_polygon(data = fr, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = metropoli, aes(x=longitude, y=latitude, size=hospitalises_total, color=hospitalises_total), alpha=0.9) +
+  scale_size_continuous(range=c(1,10), name = "") +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5, breaks = c(400, 3000, 22000)) +
+  theme_void() + 
+  guides( colour = guide_legend(title="Nombre de personnes")) +
+  coord_map()
+
+# gueris_total
+metropoli_gueris = ggplot() +
+  geom_polygon(data = fr, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point(data = metropoli, aes(x=longitude, y=latitude, size=gueris_total, color=gueris_total), alpha=0.9) +
+  scale_size_continuous(range=c(1,10), name = "") +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5, breaks = c(400, 3000, 22000)) +
+  theme_void() + 
+  guides(colour = guide_legend(title="Nombre de personnes")) +
+  coord_map()
+```
+Dans cette partie, nous préparons les cartes de régions d'Outre-Mer
+```{r}
+outre_mer = c("Mayotte", "Guyane", "Guadeloupe", "Martinique", "La Réunion")
+
+# création de sous data frames pour chaque département
+for (i in outre_mer){
+  copy = cov_dbl[cov_dbl$maille_nom == i,]
+  if (i == "La Réunion")
+    assign("reunion", copy)
+  assign(tolower(i), copy)
+}
+
+# Sélection des cartes de chaque département
+may <- map_data("world") %>% filter(region=="Mayotte")
+guy <- map_data("world") %>% filter(region=="Guyana")
+gua <- map_data("world") %>% filter(region=="Guadeloupe")
+mar <- map_data("world") %>% filter(region=="Martinique")
+reu <- map_data("world") %>% filter(region=="Reunion")
+```
+
+```{r}
+# Mayotte
+# taille du graphique
+options(repr.plot.width = 14, repr.plot.height = 8)
+
+# deces_total 
+mayotte_deces = ggplot() +
+  geom_polygon(data = may, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = mayotte, aes(x=longitude, y=latitude, size=deces_total, color=deces_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Mayotte") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# reanimation_total
+mayotte_reanimation = ggplot() +
+  geom_polygon(data = may, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = mayotte, aes(x=longitude, y=latitude, size=reanimation_total, color=reanimation_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Mayotte") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# hospitalises_total
+mayotte_hospitalises = ggplot() +
+  geom_polygon(data = may, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = mayotte, aes(x=longitude, y=latitude, size=hospitalises_total, color=hospitalises_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Mayotte") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# gueris_total
+mayotte_gueris = ggplot() +
+  geom_polygon(data = may, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = mayotte, aes(x=longitude, y=latitude, size=gueris_total, color=gueris_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Mayotte") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+```
+
+```{r}
+# Guyane
+# taille de la carte
+options(repr.plot.width = 14, repr.plot.height = 8)
+# ajustement des coordonnées GPS pour corriger l'emplacement du point sur la carte
+guyane[, 4] = -59
+
+# deces_total 
+guyane_deces = ggplot() +
+  geom_polygon(data = guy, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guyane, aes(x=longitude, y=latitude, size=deces_total, color=deces_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Guyane") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# reanimation_total
+guyane_reanimation = ggplot() +
+  geom_polygon(data = guy, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guyane, aes(x=longitude, y=latitude, size=reanimation_total, color=reanimation_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Guyane") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# hospitalises_total
+guyane_hospitalises = ggplot() +
+  geom_polygon(data = guy, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guyane, aes(x=longitude, y=latitude, size=hospitalises_total, color=hospitalises_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Guyane") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# gueris_total
+guyane_gueris = ggplot() +
+  geom_polygon(data = guy, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guyane, aes(x=longitude, y=latitude, size=gueris_total, color=gueris_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Guyane") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+```
+
+```{r}
+# Guadeloupe
+# taille de la carte
+options(repr.plot.width = 14, repr.plot.height = 8)
+
+# deces_total 
+guadeloupe_deces = ggplot() +
+  geom_polygon(data = gua, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guadeloupe, aes(x=longitude, y=latitude, size=deces_total, color=deces_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Gouadeloupe") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# reanimation_total
+guadeloupe_reanimation = ggplot() +
+  geom_polygon(data = gua, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guadeloupe, aes(x=longitude, y=latitude, size=reanimation_total, color=reanimation_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Gouadeloupe") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# hospitalises_total
+guadeloupe_hospitalises = ggplot() +
+  geom_polygon(data = gua, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guadeloupe, aes(x=longitude, y=latitude, size=hospitalises_total, color=hospitalises_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Gouadeloupe") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# gueris_total
+guadeloupe_gueris = ggplot() +
+  geom_polygon(data = gua, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = guadeloupe, aes(x=longitude, y=latitude, size=gueris_total, color=gueris_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Gouadeloupe") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+```
+
+```{r}
+# Martinique
+# taille de la carte
+options(repr.plot.width = 14, repr.plot.height = 8)
+
+# deces_total 
+martinique_deces = ggplot() +
+  geom_polygon(data = mar, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = martinique, aes(x=longitude, y=latitude, size=deces_total, color=deces_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Martinique") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# reanimation_total
+martinique_reanimation = ggplot() +
+  geom_polygon(data = mar, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = martinique, aes(x=longitude, y=latitude, size=reanimation_total, color=reanimation_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Martinique") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# hospitalises_total
+martinique_hospitalises = ggplot() +
+  geom_polygon(data = mar, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = martinique, aes(x=longitude, y=latitude, size=hospitalises_total, color=hospitalises_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Martinique") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# gueris_total
+martinique_gueris = ggplot() +
+  geom_polygon(data = mar, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = martinique, aes(x=longitude, y=latitude, size=gueris_total, color=gueris_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "Martinique") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+```
+
+```{r}
+# La Réunion
+# taille de la carte
+options(repr.plot.width = 14, repr.plot.height = 14)
+
+# deces_total 
+reunion_deces = ggplot() +
+  geom_polygon(data = reu, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = reunion, aes(x=longitude, y=latitude, size=deces_total, color=deces_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "La Réunion") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# reanimation_total
+reunion_reanimation = ggplot() +
+  geom_polygon(data = reu, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = reunion, aes(x=longitude, y=latitude, size=reanimation_total, color=reanimation_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "La Réunion") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# hospitalises_total
+reunion_hospitalises = ggplot() +
+  geom_polygon(data = reu, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = reunion, aes(x=longitude, y=latitude, size=hospitalises_total, color=hospitalises_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "La Réunion") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+
+# gueris_total
+reunion_gueris = ggplot() +
+  geom_polygon(data = reu, aes(x=long, y = lat, group = group), fill="grey", alpha=0.3) +
+  geom_point( data = reunion, aes(x=longitude, y=latitude, size=gueris_total, color=gueris_total), alpha=0.9) +
+  scale_size_continuous(range=c(0, 2)) +
+  scale_color_viridis(trans="log", option = "inferno", direction = -1, begin = 0.5) +
+  labs(subtitle = "La Réunion") +
+  theme_void() + 
+  coord_map() + 
+  theme(legend.position="none",
+        plot.subtitle = element_text(hjust = 0))
+```
+Dans cette partie, nous allons rassembler les différentes cartes
+```{r}
+# deces_total
+suppressWarnings(grid.arrange(guadeloupe_deces, martinique_deces, guyane_deces, mayotte_deces, reunion_deces, metropoli_deces,
+             nrow = 4, heights=c(1.5, 1.5, 1.5, 1),
+             layout_matrix = rbind(c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 1, 2, 3, 4, 5, NA)),
+             top=textGrob("Total des décès",gp=gpar(fontsize=20,font=3))))
+
+# reanimation_total
+suppressWarnings(grid.arrange(guadeloupe_reanimation, martinique_reanimation, guyane_reanimation, mayotte_reanimation, reunion_reanimation, metropoli_reanimation,
+             nrow = 4, heights=c(1.5, 1.5, 1.5, 1),
+             layout_matrix = rbind(c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 1, 2, 3, 4, 5, NA)),
+             top=textGrob("Total des réanimations",gp=gpar(fontsize=20,font=3))))
+
+# hospitalises_total
+suppressWarnings(grid.arrange(guadeloupe_hospitalises, martinique_hospitalises, guyane_hospitalises, mayotte_hospitalises, reunion_hospitalises, metropoli_hospitalises,
+             nrow = 4, heights=c(1.5, 1.5, 1.5, 1),
+             layout_matrix = rbind(c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 1, 2, 3, 4, 5, NA)),
+             top=textGrob("Total des hospitalisations",gp=gpar(fontsize=20,font=3))))
+
+# gueris_total
+suppressWarnings(grid.arrange(guadeloupe_gueris, martinique_gueris, guyane_gueris, mayotte_gueris, reunion_gueris, metropoli_gueris,
+             nrow = 4, heights=c(1.5, 1.5, 1.5, 1),
+             layout_matrix = rbind(c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 6, 6, 6, 6, 6, NA),
+                                   c(NA, 1, 2, 3, 4, 5, NA)),
+             top=textGrob("Total des guérisons",gp=gpar(fontsize=20,font=3))))
+```
+
+
+## Partie 2 : Prédiction du nombre de décès
+
+### 1
+#### Corrélation des variables entre elles
+```{r}
+cov_cor <- cor(cov[-1])
+corrplot(cov_cor, 
+         method = "circle", type = "lower", diag = FALSE,
+         tl.srt = 30, tl.col = "black", 
+         bg= "azure2", col = brewer.pal(6,"RdYlGn"), addCoef.col = "black")
+```
+Toutes les variables sont fortement corrélées entre elles en dehors de duree_jours, comme vu dans la partie 1. Cette corrélation est positive : lorsque l'une d'elle augmente, l'autre aussi.
+
+### 2
+#### Nuages de points entre chaque variable et deces_total
+```{r}
+par(mfrow=c(2,2))
+
+plot(deces_total ~ duree_jours, data = cov)
+plot(deces_total ~ reanimation_total, data = cov)
+plot(deces_total ~ hospitalises_total, data = cov)
+plot(deces_total ~ gueris_total, data = cov)
+```
+Les variables qui vont nous permettre d'expliquer au mieux deces_total sont hospitalises_total et gueris_total.
+
+### 3
+#### Division du jeu de données en deux ensembles apprentissage/test (80%-20%)
+```{r}
+sample <- sample.int(n = nrow(cov), size = floor(.80*nrow(cov)))
+train <- cov[sample, ]
+test  <- cov[-sample, ]
+# vérification des dimensions
+dim(train)
+dim(test)
+```
+
+### 4
+#### Régression linéaire pour deces_total
+```{r}
+par(mfrow = c(2, 2))
+
+reg_reanimation <- lm(deces_total ~ -1 + reanimation_total, data=train) 
+plot(train$reanimation_total, train$deces_total)
+abline(reg_reanimation, col='red')
+
+reg_hospitalises <- lm(deces_total ~ -1 + hospitalises_total, data=train) 
+plot(train$hospitalises_total, train$deces_total)
+abline(reg_hospitalises, col='red')
+
+reg_gueris <- lm(deces_total ~ -1 + gueris_total, data=train) 
+plot(train$gueris_total, train$deces_total)
+abline(reg_gueris, col='red')
+
+```
+Les points de chaque diagramme forment un nuage élliptique. Le diagramme de gueris_total est celui avec le moins de résidus, et le diagramme de reanimation_total a le plus de résidus. 
+
+### 5
+#### Analyse des résultats
+```{r}
+print("Coefficients de chaque variable")
+reg_reanimation$coefficients
+reg_hospitalises$coefficients
+reg_gueris$coefficients
+
+print(toupper("***** Résultats pour la variable reanimation_total *****"))
+summary(reg_reanimation)
+print(toupper("***** Résultats pour la variable hospitalises_total *****"))
+summary(reg_hospitalises)
+print(toupper("***** Résultats pour la variable gueris_total *****"))
+summary(reg_gueris)
+```
+Le coefficient de régression de reanimation_total est le plus élevé, et celui de hospitalises_total est le moins élevé.
+La variable gueris_total est celle avec le moins d'erreur résiduelle.
+
+### 6
+#### Mean Absolute Error et Mean Squared Error
+```{r}
+# Train
+print("RÉANIMATIONS")
+print("apprentissage")
+rea_y_est_train = predict(reg_reanimation)
+MAE_rea = MAE(train$deces_total, rea_y_est_train) 
+MSE_rea = MSE(train$deces_total, rea_y_est_train) 
+MAE_rea + MSE_rea
+print("test")
+rea_y_est_test = predict(reg_reanimation , test)
+MAE_rea_test = MAE(test$deces_total, rea_y_est_test )
+MSE_rea_test = MSE(test$deces_total, rea_y_est_test )
+MAE_rea_test + MSE_rea_test
+
+print("HOSPITALISATIONS")
+print("apprentissage")
+hospi_y_est_train = predict(reg_hospitalises)
+MAE_hos = MAE(train$deces_total,hospi_y_est_train) 
+MSE_hos = MSE(train$deces_total, hospi_y_est_train) 
+MAE_hos + MSE_hos
+print("test")
+hospi_y_est_test = predict(reg_hospitalises, test)
+MAE_hos_test = MAE(test$deces_total,hospi_y_est_test )
+MSE_hos_test = MSE(test$deces_total,hospi_y_est_test )
+MAE_hos_test + MSE_hos_test
+
+print("GUÉRISONS")
+print("apprentissage")
+guer_y_est_train = predict(reg_gueris)
+MAE_gue = MAE(train$deces_total, guer_y_est_train) 
+MSE_gue = MSE(train$deces_total, guer_y_est_train) 
+MAE_gue + MSE_gue
+print("test")
+guer_y_est_test = predict(reg_gueris, test)
+MAE_gue_test = MAE(test$deces_total, guer_y_est_test )
+MSE_gue_test = MSE(test$deces_total, guer_y_est_test )
+MAE_gue_test + MSE_gue_test
+```
+
+### 7
+#### Comparaison des MAE et MSE
+C'est avec la variable hospitalises_total que les erreurs sont les plus faibles. Les erreurs de l'ensemble de test sont sistématiquement plus faibles que celles de l'ensemble d'apprentissage, ce qui est positif. La différence est flagrante avec la variable reanimation_total.
+#### Précision des tests
+```{r}
+# Création des jeux de données selon chaque test
+rea = cbind(test[, c(1, 3)], rea_y_est_test)
+hospi = cbind(test[, c(1, 3)], hospi_y_est_test)
+guer = cbind(test[, c(1, 3)], guer_y_est_test)
+
+# Calcul du nombre de prédictions justes (en arrondissant à la centaine supérieure)
+rea_trouve = 0
+hospi_trouve = 0
+guer_trouve = 0
+for (i in 1:20){
+  rea[i,2] = ceiling(rea[i, 2]/100) * 100
+  rea[i,3] = ceiling(rea[i, 3]/100) * 100
+  if (rea[i,2] == rea[i,3])
+    rea_trouve = rea_trouve + 1
+  hospi[i,2] = ceiling(hospi[i, 2]/100) * 100
+  hospi[i,3] = ceiling(hospi[i, 3]/100) * 100
+  if (hospi[i,2] == hospi[i,3])
+    hospi_trouve = hospi_trouve + 1
+  guer[i,2] = ceiling(guer[i, 2]/100) * 100
+  guer[i,3] = ceiling(guer[i, 3]/100) * 100
+  if (guer[i,2] == guer[i,3])
+    guer_trouve = guer_trouve + 1
+}
+
+# Calcul de la précision pour chaque test
+rea_precision = rea_trouve / 20
+hospi_precision = hospi_trouve / 20
+guer_precision = guer_trouve / 20
+
+# Affichage des résultats
+print("Précision pour les prédictions avec reanimation_total :")
+rea_precision
+print("Précision pour les prédictions avec hospitalises_total :")
+hospi_precision
+print("Précision pour les prédictions avec gueris_total :")
+guer_precision
+```
+La précision de la variable reanimation_total est celle qui est la plus élevée. C'est donc celle qu'il convient d'utiliser. Cela fait sens, étant donné que la plupart des personnes étant en réanimation décèdent.
+
+
+## Partie 3: Clustering des départements selon la dynamique de propagation du virus
+
+### 1
+#### Réalisation d'une ACP
+```{r}
+pca = PCA(cov[-1],graph = FALSE, scale.unit = TRUE)
+
+eigen_val = get_eigenvalue(pca)
+eigen_val
+
+dimensions = dim(eigen_val)[1]
+
+dim1 = eigen_val[1]
+dim2 = eigen_val[2]
+
+dim1_val = round(100 * dim1 / 5 , 1)
+dim2_val = round(100 * dim2 / 5 , 1)
+dim1_val
+dim2_val
+```
+La variation est expliquée par la dimension 1 à environ 76.5% et par la dimension 2 à environ 19.5% (soit environ 96% pour les deux). On vérifie cela tout simplement avec le diagramme ci-dessous : il présente un coude après la dimension 2.
+```{r}
+fviz_eig(pca, addlabels = TRUE, barfill = "coral2", barcolor = "darkred")
+```
+#### Étude des variables
+```{r}
+variables = get_pca_var(pca)
+variables$contrib[, c(1, 2)]
+```
+Les variables contribuant le plus à la dimension 1 sont reanimation_total puis gueris_total, suivies de près par deces_total et hospitalises_total.
+La participation de duree_jours est très faible.
+Pour la dimension 2, c'est tout l'inverse : duree_jours a une participation quasiment totale, et toutes les autres variables ont une participation extrêmement faible.
+```{r}
+corrplot(variables$cos2[, c(1, 2)],is.corr = FALSE, col = "darkred")
+fviz_pca_var(pca, col.var = "darkred", repel = TRUE)
+sphpca(cov[-1], v=130)
+```
+Nous observons ici les corrélations entre les variables. Le diagramme de corrélation confirme ce que nous avons observé pour les contributions.
+Les deux vues du graphique des variables nous permettent d'appuyer ceci. En effet, duree_jours se trouve dans un angle à environ 90° des autres variables, ce qui signifie que ces deux groupes ne sont pas corrélés. Les autres variables, groupées, montrent une forte corrélation entre elles.
+### 2
+#### Étude des individus
+```{r}
+fviz_contrib(pca, choice = "ind", axes = 1, top = 5)
+fviz_contrib(pca, choice = "ind", axes = 2, top = 5)
+
+top_individus_dim1 = as.vector(cov[c(76, 46, 92, 45, 87),]$maille_nom)
+top_individus_dim1
+
+top_individus_dim2 = as.vector(cov[c(56, 62, 83, 96, 66),]$maille_nom)
+top_individus_dim2
+```
+Les 5 individus contribuant le plus à la dimension 1 sont Paris, les Hauts-de-Seine, le Val-de-Marne, le Haut-Rhin et la Seine-Saint-Denis.
+Les 5 contribuant le plus à la dimension 2 sont la Loire-Atlantique, le Maine-et-Loire, la Sarthe, la Vendée et la Mayenne.
+```{r}
+fviz_pca_ind (pca, col.ind = cov$deces_total,
+              gradient.cols = c("#339933", "#FFFF66", "#ff0000"),
+              legend.title = "Décès")
+```
+Le nuage de points est assez dispersé, cela veut dire qu'il y a une forte variabilité. Sur l'axe horizontal, les individus proches ont des comportement similaires, ceux qui sont éloignés ont des comportements différents : nombre de décès et autre différents, comme nous avons effectivement pu le voir sur les cartes de la France.
+La position verticale dépend uniquement de durée_jours.
+
+### 3
+#### Classification K-means
+```{r}
+fviz_nbclust(scale(cov[, -1]), kmeans, method = "gap_stat")
+```
+Je choisis de créer 3 clusters, car 1 et 2 n'ont pas de sens/d'intérêt, et au dessus de 3 la lisibilité risque d'être amoindrie. On observe un coude entre 2 et 3.
+```{r}
+set.seed(123) 
+k_cov <- kmeans(cov[, -1], 3, nstart = 10)
+
+plot_k_means = fviz_cluster(k_cov, data = cov[, -1], 
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
+             ggtheme = theme_minimal())
+plot(plot_k_means)
+```
+Les trois groupes font sens : nous avons ceux qui sont rouges/oranges (cluster 1), ceux qui sont jaune/vert clair (cluster 3), et ceux qui sont vert (cluster 2). Je valide donc le nombre 3.
+#### Classification CAH
+```{r}
+d_cov = dist(cov[, -c(1, 2)], method = "euclidean")
+
+par(mfrow = c(2, 2))
+# lien minimum
+h_mini = hclust(d_cov, method = "single")
+plot(h_mini)
+
+# lien maximum
+h_maxi = hclust(d_cov, method = "complete")
+plot(h_maxi)
+
+# lien moyen 
+h_moy = hclust(d_cov, method = "average")
+plot(h_moy)
+
+# lien ward
+h_ward = hclust(d_cov, method = "ward.D")
+plot(h_ward)
+```
+Le dendogramme avec le lien ward est celui qui semble faire les groupes les plus homogènes. Ceci est confirmé avec le coloriage des branches : il n'y a que le lien ward qui ne met pas l'individu Paris seul dans un cluster.
+```{r}
+par(mfrow = c(2, 2))
+# lien minimum
+c_mini = cutree(h_mini, 3)
+dend_mini <- as.dendrogram(h_mini)
+dend <- color_branches(dend_mini, k = 3)
+plot(dend, main = "Minimal")
+
+# lien maximum
+c_maxi = cutree(h_maxi, 3)
+dend_maxi <- as.dendrogram(h_maxi)
+dend <- color_branches(dend_maxi, k = 3)
+plot(dend, main = "Maximal")
+
+# lien moyen
+c_moy = cutree(h_moy, 3)
+dend_moy <- as.dendrogram(h_moy)
+dend <- color_branches(dend_moy, k = 3)
+plot(dend, main = "Moyen")
+
+# lien ward
+c_ward = cutree(h_ward, 3)
+dend_ward <- as.dendrogram(h_ward)
+dend <- color_branches(dend_ward, k = 3)
+plot(dend, main = "Ward 2")
+```
+### 4
+#### Comparaison des algorithmes
+```{r}
+print("Kmeans")
+table(grp2 = k_cov$cluster, grp4 = k_cov$cluster)
+print("Minimal")
+table(grp2 = c_mini, grp4 = c_mini)
+print("Maximal")
+table(grp2 = c_maxi, grp4 = c_maxi)
+print("Moyen")
+table(grp2 = c_moy, grp4 = c_moy)
+print("Ward")
+table(grp2 = c_ward, grp4 = c_ward)
+```
+Nous pouvons voir avec ces tables de confusion que les algorithmes K-means et ward sont ceux qui font les groupes les plus homogènes. Ceci se vérifie avec les graphes suivants : on observe aussi que malgré une meilleure répartition avec K-means et ward, c'est l'algorithme K-means qui a fait les groupes les plus cohérents
+```{r}
+plot(plot_k_means)
+
+clusplot(cov, c_mini, main='Minimum',
+         color=TRUE,
+         shade=FALSE, lines = 0)
+
+clusplot(cov, c_maxi, main='Maximum',
+         color=TRUE,
+         shade=FALSE, lines = 0)
+
+clusplot(cov, c_moy, main='Moyen',
+         color=TRUE,
+         shade=FALSE, lines = 0)
+
+clusplot(cov, c_ward, main='Ward',
+         color=TRUE,
+         shade=FALSE, lines = 0)
+```
+
+### 5
+#### Déductions
+La dynamique de propagation semble liée à la géographie (comme vu dans la partie 1), et est aussi différente selon les départements. Nous avons 3 groupes de départements dans lesquels le nombre de personnes guéries, atteintes et décédées sont similaires. Les départements les plus lourdement touchés sont ceux qui contribuent le plus à la dimension 1, c'est-à-dire au nombre de contaminations, décès, etc. Cela est tout à fait logique. Nous avons les département les plus gravement touchés, ceux qui sont moyennement touchés, et ceux qui sont le moins touchés, avec une distribution assez homogène.
+
+# Fatality
+
+#### Préparation des données
+```{r}
+fatality = read.csv("Fatality.csv", sep = ",")
+ft = scale(fatality[, -c(7, 8)])
+head(fatality)
+```
+#### Création de clusters
+```{r}
+d_ft = dist(ft, method = "euclidean")
+
+par(mfrow = c(2, 2))
+# lien minimum
+h_mini = hclust(d_ft, method = "single")
+plot(h_mini)
+
+# lien maximum
+h_maxi = hclust(d_ft, method = "complete")
+plot(h_maxi)
+
+# lien moyen 
+h_moy = hclust(d_ft, method = "average")
+plot(h_moy)
+
+# lien ward
+h_ward = hclust(d_ft, method = "ward.D")
+plot(h_ward)
+```
+Nous voyons que l'algorithme ward est celui qui a les branches les mieux définies et départagées. C'est donc cet algorithme que je vais garder en clutering hiérarchique.
+```{r}
+set.seed(123) 
+k_ft <- kmeans(ft, 3, nstart = 10)
+
+fviz_cluster(k_ft, data = ft, 
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07"),
+             ggtheme = theme_minimal())
+
+c_ward = cutree(h_ward, 3)
+dend_ward <- as.dendrogram(h_ward)
+dend <- color_branches(dend_ward, k = 3)
+plot(dend, main = "Ward 2")
+
+clusplot(fatality, c_ward, main='Ward',
+         color=TRUE,
+         shade=FALSE, lines = 0)
+```
+En comparant les clusters de l'algorithme K-means et Ward, je vois que les clusters sont assez similaires. Les clusters créés avec K-means étant plus maniables, ce sont eux que je vais garder pour la suite.
+#### Étude de chaque groupe
+```{r}
+# Création de sous data frame par groupe 
+clust <- cbind(fatality, clusterNum = k_ft$cluster)
+clust1<- subset(clust,clust$clusterNum==1)
+clust1 = clust1[, -12]
+clust2<- subset(clust ,clust$clusterNum==2)
+clust2 = clust2[, -12]
+clust3<- subset(clust ,clust$clusterNum==3)
+clust3 = clust3[, -12]
+
+sum1 = summary(clust1)
+sum2 = summary(clust2)
+sum3 = summary(clust3)
+
+sum1
+sum2
+sum3
+```
+
+```{r}
+# Boxplot sur chaque groupe
+par(mar=c(8,6,4,1))
+sca1 = scale(clust1[, -c(7, 8)], center = T, scale = T)
+boxplot(sca1, las = 2, col=rgb(0.8, 0.8, 1))
+
+par(mar=c(8,6,4,1))
+sca2 = scale(clust2[, -c(7, 8)], center = T, scale = T)
+boxplot(sca2, las = 2, col=rgb(0.8, 0.8, 1))
+
+par(mar=c(8,6,4,1))
+sca3 = scale(clust3[, -c(7, 8)], center = T, scale = T)
+boxplot(sca3, las = 2, col=rgb(0.8, 0.8, 1))
+```
+
+```{r}
+# Graphe de corrélation pour chaque groupe
+corrplot(cor(clust1[, -c(7, 8)]), 
+         method = "circle", type = "lower", diag = FALSE,
+         tl.srt = 30, tl.col = "black", 
+         bg= "azure2", col = brewer.pal(6,"RdYlGn"), addCoef.col = "black")
+
+corrplot(cor(clust2[, -c(7, 8)]), 
+         method = "circle", type = "lower", diag = FALSE,
+         tl.srt = 30, tl.col = "black", 
+         bg= "azure2", col = brewer.pal(6,"RdYlGn"), addCoef.col = "black")
+
+corrplot(cor(clust3[, -c(7, 8)]), 
+         method = "circle", type = "lower", diag = FALSE,
+         tl.srt = 30, tl.col = "black", 
+         bg= "azure2", col = brewer.pal(6,"RdYlGn"), addCoef.col = "black")
+```
+
+##### L’âge minimum pour boire de l’alcool semble t-il lié au nombre de morts dans certains groupes ?
+Dans le groupe n°3, l’âge minimum pour boire de l’alcool semble effectivement lié au nombre de morts : on a une corrélation positive de 0.35. Cela signifie que quand l'âge minimum augmente, le nombre de morts augmente également 
+
+##### Les groupes où les taxes de bière les plus faibles sont-ils ceux pour lesquels le nombre de morts est le plus élevé ? ceux avec le taux de chômage le plus élevé ?
+Le groupe 3 est celui avec les taxes les plus faibles, le nombre de morts et le taux de chômage les plus élevés.
+Le groupe 2 est celui avec les taxes les plus élevée, et le nombre de morts de le taux de chômage les plus faibles.
+Le groupe1 se situe entre les groupe 2 et 3 pour les taxes, le nombres de décès et le chômage.
+
+##### Les groupes où l’on boit le plus sont-ils ceux où les revenus sont les plus élevés ? ceux avec le moins de condamnations ?
+Le groupe 3 est celui avec les revenus les plus élevés, puis le groupe 2, puis le 1.
+On suppose que les groupes où les taxes sont les plus élevées sont ceux qui boivent le plus, en partant du principe que c'est pour dissuader l'achat de bières.
+On voit alors que le groupe 3, avec les revenus les plus élevés, est celui qui boit le moins.
+```{r}
+table(clust1[, c(7, 8)])
+table(clust2[, c(7, 8)])
+table(clust3[, c(7, 8)])
+```
+Groupe 1 : 
+jail = 100*57/136 = 42%
+comserd = 100*20/136 = 15%
+total = 29%
+
+Groupe 2 :
+jail = 100*18/83 = 22%
+comserd = 100*18/83 = 22%
+total = 22%
+
+Groupe3 :
+jail = 100*19/117 = 16%
+comserd = 100*24/117 = 21%
+total = 19%
+
+Nous pouvons voir que le groupe avec le plus de revenus a le moins de condamnations, et celui avec le moins de revenus a le plus de condamnations.
+
+##### La mortalité est-elle équivalente pour tous les groupes ? Quels sont les états où la mortalité est la plus élevée ? 
+La mortalité du groupe 3 est en moyenne plus faible que les autres. On observe que c'est le groupe avec les mortalités minimale et maximale les plus faibles.
+```{r}
+mrtl = head(fatality[order(fatality$mrall, decreasing = TRUE),], 40)
+rvn = head(fatality[order(fatality$perinc),], 60)
+
+mrtl = unique(mrtl$state)
+rvn = unique(rvn$state)
+mrtl
+rvn
+intersect(mrtl, rvn)
+```
+
+Les 10 états dans lesquels la mortalité est la plus élevée sont les états 1, 4, 28, 30, 32, 35, 40, 45, 48 et 56. 
+Parmi eux, les états 1, 28, 30, 35 et 45 sont dans les 15 états les plus pauvres.
